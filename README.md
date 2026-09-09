@@ -189,6 +189,43 @@ flowchart LR
     V -- no --> BUG["fix the runtime that's wrong"]
 ```
 
+### Getting `Rscript` on the PATH (one-time)
+
+R installs to `C:\Program Files\R\R-4.4.2in` but does **not** add itself to PATH, so
+`Rscript` is "not recognized" in a fresh PowerShell until you do this:
+
+```mermaid
+flowchart TD
+    A["PowerShell: Rscript --version"] --> B{"found?"}
+    B -- yes --> OK["✅ run the .R scripts"]
+    B -- "not recognized" --> C["Get-ChildItem 'C:\Program Files\R'
+confirm the version folder (R-4.4.2 here)"]
+    C --> D{"this session only,
+or permanently?"}
+    D -- "this session" --> E["$env:PATH += ';C:\Program Files\R\R-4.4.2\bin'"]
+    D -- permanent --> F["[Environment]::SetEnvironmentVariable('Path',
+  [Environment]::GetEnvironmentVariable('Path','User') + ';C:\Program Files\R\R-4.4.2\bin',
+  'User')"]
+    F --> G["close + reopen PowerShell"]
+    E --> H["Rscript --version"]
+    G --> H
+    H --> B2{"prints R version 4.4.2?"}
+    B2 -- yes --> OK
+    B2 -- no --> C
+```
+
+```powershell
+# permanent, current user — run once, then reopen PowerShell
+[Environment]::SetEnvironmentVariable('Path',
+  [Environment]::GetEnvironmentVariable('Path','User') + ';C:\Program Files\R\R-4.4.2in', 'User')
+
+# or just for this window
+$env:PATH += ';C:\Program Files\R\R-4.4.2in'
+Rscript --version
+```
+
+When you upgrade R the folder name changes (e.g. `R-4.5.0`) — repeat with the new path.
+
 ```powershell
 pip install -r analysis/requirements-py.txt
 python analysis/01_paper_roi_ci/paper_roi.py
