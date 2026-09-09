@@ -191,21 +191,25 @@ flowchart LR
 
 ### Getting `Rscript` on the PATH (one-time)
 
-R installs to `C:\Program Files\R\R-4.4.2in` but does **not** add itself to PATH, so
-`Rscript` is "not recognized" in a fresh PowerShell until you do this:
+**Why bother.** The analysis loop only works as a *check* if you run every script twice,
+once in Python and once in R, and compare the numbers. `Rscript` is the command-line R
+runner that makes the R half a one-liner (`Rscript analysis/…/paper_roi.R`) instead of
+opening RStudio, setting the working directory, and clicking Source. PATH is the list of
+folders PowerShell searches when you type a command; R's installer does **not** add its
+`bin` folder to it, so `Rscript` is "not recognized" in a fresh window even though R is
+installed. Putting `C:\Program Files\R\R-4.4.2\bin` on the PATH once means `Rscript` works
+from any folder, in any window, and inside `snapshot.bat` / Task Scheduler / Claude Code
+without hard-coding the full path everywhere. It is the same reason `python` works: the
+Python installer offered the "Add to PATH" checkbox and R's did not.
 
 ```mermaid
 flowchart TD
     A["PowerShell: Rscript --version"] --> B{"found?"}
-    B -- yes --> OK["✅ run the .R scripts"]
-    B -- "not recognized" --> C["Get-ChildItem 'C:\Program Files\R'
-confirm the version folder (R-4.4.2 here)"]
-    C --> D{"this session only,
-or permanently?"}
-    D -- "this session" --> E["$env:PATH += ';C:\Program Files\R\R-4.4.2\bin'"]
-    D -- permanent --> F["[Environment]::SetEnvironmentVariable('Path',
-  [Environment]::GetEnvironmentVariable('Path','User') + ';C:\Program Files\R\R-4.4.2\bin',
-  'User')"]
+    B -- yes --> OK["✅ run the .R scripts from any folder"]
+    B -- "not recognized" --> C["Get-ChildItem 'C:/Program Files/R'\nconfirm the version folder (R-4.4.2 here)"]
+    C --> D{"this session only,\nor permanently?"}
+    D -- "this session" --> E["$env:PATH += ';C:/Program Files/R/R-4.4.2/bin'"]
+    D -- permanent --> F["[Environment]::SetEnvironmentVariable('Path',\n  user Path + ';C:/Program Files/R/R-4.4.2/bin', 'User')"]
     F --> G["close + reopen PowerShell"]
     E --> H["Rscript --version"]
     G --> H
@@ -214,13 +218,15 @@ or permanently?"}
     B2 -- no --> C
 ```
 
+*(Forward slashes in the diagram only, because Mermaid eats backslashes. Windows accepts either.)*
+
 ```powershell
 # permanent, current user — run once, then reopen PowerShell
 [Environment]::SetEnvironmentVariable('Path',
-  [Environment]::GetEnvironmentVariable('Path','User') + ';C:\Program Files\R\R-4.4.2in', 'User')
+  [Environment]::GetEnvironmentVariable('Path','User') + ';C:\Program Files\R\R-4.4.2\bin', 'User')
 
 # or just for this window
-$env:PATH += ';C:\Program Files\R\R-4.4.2in'
+$env:PATH += ';C:\Program Files\R\R-4.4.2\bin'
 Rscript --version
 ```
 
@@ -232,7 +238,7 @@ python analysis/01_paper_roi_ci/paper_roi.py
 python analysis/02_fpi_calibration/fpi_calibration.py
 python analysis/03_line_move/line_move.py
 
-# R (install once; Rscript lives in C:\Program Files\R\R-4.4.2\bin on this machine)
+# R (install packages once; see the PATH diagram above)
 Rscript -e 'install.packages(readLines("analysis/requirements-r.txt"), repos="https://cloud.r-project.org")'
 Rscript analysis/01_paper_roi_ci/paper_roi.R
 Rscript analysis/02_fpi_calibration/fpi_calibration.R
