@@ -1,0 +1,15 @@
+# Make every language in the repo count toward GitHub's language bar.
+# Linguist normally hides "documentation" and "data" files and ignores
+# vendored paths; we want Python, R, Markdown, Batchfile, SQL and HTML all shown.
+*.py    linguist-detectable=true linguist-language=Python
+*.R     linguist-detectable=true linguist-language=R
+*.md    linguist-detectable=true linguist-documentation=false
+*.html  linguist-detectable=true
+*.bat   linguist-detectable=true linguist-language=Batchfile
+*.sql   linguist-detectable=true
+*.txt   linguist-detectable=true linguist-language=Text
+*.csv   linguist-detectable=true
+reports/**  linguist-documentation=false linguist-generated=false
+analysis/** linguist-vendored=false
+* text=auto eol=lf
+*.bat text eol=crlf

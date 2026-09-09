@@ -1,0 +1,17 @@
+.claude/*
+__pycache__/
+*.pyc
+.venv/
+venv/
+.idea/
+.vscode/
+*.log
+.env
+bets.csv
+data.db
+data.db-journal
+snapshot.log
+analysis/_out/
+.Rhistory
+.RData
+.Rproj.user/
