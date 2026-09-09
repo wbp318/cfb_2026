@@ -26,7 +26,10 @@ python cfb_edge.py --bet <id> --kind spread --side "Team" --line 3.5 --price -11
 python analysis/01_paper_roi_ci/paper_roi.py      # and the .R twin via Rscript
 ```
 
-There are no unit tests. Verify by running the board for next Saturday and one `--backfill`
+CI (`.github/workflows/ci.yml`) runs on every push: py_compile, `ruff check` (fix the code,
+never relax the lint), `--help`, schema bootstrap on a scratch DB, and all three analysis
+scripts in both Python and R against that empty DB via the `CFB_DB` env var. Run
+`ruff check cfb_edge.py analysis` before pushing. There are no unit tests. Verify by running the board for next Saturday and one `--backfill`
 of a past Saturday, then running all three analysis scripts in **both** runtimes and checking
 the point estimates match. `Rscript` is at `C:\Program Files\R\R-4.4.2\bin` (not on PATH).
 

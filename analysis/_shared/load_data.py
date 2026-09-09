@@ -8,6 +8,7 @@ Mirrors analysis/_shared/load_data.R — keep them in lockstep.
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -19,7 +20,8 @@ import pandas as pd
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-DEFAULT_DB = Path(__file__).resolve().parents[2] / "data.db"
+# CFB_DB env var overrides the location (CI points it at a scratch DB).
+DEFAULT_DB = Path(os.environ.get("CFB_DB") or Path(__file__).resolve().parents[2] / "data.db")
 BREAK_EVEN_110 = 110.0 / 210.0          # 52.38% — cover rate needed at -110
 
 # The LAST snapshot taken for a game is the closest thing we have to the

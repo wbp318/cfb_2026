@@ -220,6 +220,46 @@ flowchart TD
 
 *(Forward slashes in the diagram only, because Mermaid eats backslashes. Windows accepts either.)*
 
+**What "permanently" actually does.** Windows keeps two PATH lists in the registry: a
+*machine* list (all users, needs admin) and a *user* list (just you, no admin). Every
+program builds its own PATH **once, at start-up**, by reading `machine ; user` from the
+registry. That is why a window that was already open never sees the change, and why
+"close + reopen" is a real step, not superstition. On this machine the R folder was added
+to the **user** list on 2026‑09‑09.
+
+```mermaid
+flowchart LR
+    subgraph REG["Registry (persistent)"]
+        M["Machine Path\nHKLM\\...\\Environment\nC:/Windows/system32 · Git · nodejs · …\n(admin to edit)"]
+        U["User Path\nHKCU\\Environment\nPython · VS Code · npm · **R-4.4.2/bin**\n(no admin, just you)"]
+    end
+    SET["[Environment]::SetEnvironmentVariable('Path', …, 'User')\nor System Properties → Environment Variables"] -->|writes| U
+
+    subgraph OLD["Windows already open"]
+        O1["PowerShell opened *before* the change\n$env:PATH = old machine + old user\nRscript → not recognized"]
+    end
+    subgraph NEW["Anything opened *after* the change"]
+        N1["new PowerShell / Task Scheduler / Claude Code\n$env:PATH = machine ; user (fresh read)\nRscript → C:/Program Files/R/R-4.4.2/bin/Rscript.exe"]
+    end
+    M -->|read once at start-up| N1
+    U -->|read once at start-up| N1
+    U -. "never re-read" .-> O1
+    O1 -->|"close + reopen"| N1
+
+    TMP["$env:PATH += '…'\n(session only)"] -.->|"changes this window only,\nvanishes when it closes"| O1
+```
+
+Three ways to reach the same result, and where each one lives:
+
+| Method | Scope | Survives reboot? | Admin? |
+|---|---|---|---|
+| `$env:PATH += ';C:\Program Files\R\R-4.4.2\bin'` | this window only | no | no |
+| `[Environment]::SetEnvironmentVariable('Path', …, 'User')` | your account, every new window | **yes** | no |
+| System Properties → Environment Variables → *System variables* → Path | every account | yes | yes |
+
+To **undo**: System Properties → Environment Variables → *User variables* → Path → remove
+the R entry. When you **upgrade R** the folder name changes (`R-4.5.0`), so swap the entry.
+
 ```powershell
 # permanent, current user — run once, then reopen PowerShell
 [Environment]::SetEnvironmentVariable('Path',
@@ -246,6 +286,43 @@ Rscript analysis/03_line_move/line_move.R
 ```
 
 Outputs land in `analysis/_out/` (gitignored). See [`analysis/README.md`](analysis/README.md).
+
+---
+
+## CI
+
+Every push to `main` and every pull request runs `.github/workflows/ci.yml`. Nothing in
+CI touches ESPN — the point is to catch syntax, lint, schema and runtime-drift bugs before
+they reach the laptop on a Saturday morning.
+
+```mermaid
+flowchart LR
+    PUSH["git push / PR"] --> PY["python job\n(3.12 and 3.13 matrix)"]
+    PUSH --> RJ["R job\n(r-lib/actions, R 4.4)"]
+    PY --> P1["py_compile\ncfb_edge.py + analysis/*.py"]
+    P1 --> P2["ruff check\n(fix-or-fail — never relax the lint)"]
+    P2 --> P3["cfb_edge.py --help\n(argparse still parses)"]
+    P3 --> P4["--paper-show --db scratch.db\n(SCHEMA + MIGRATIONS bootstrap)"]
+    P4 --> P5["run all 3 analysis .py\nagainst the empty scratch DB\nCFB_DB env var"]
+    RJ --> R1["install DBI · RSQLite · dplyr · boot"]
+    R1 --> R2["bootstrap the same scratch DB\nwith the Python tool"]
+    R2 --> R3["run all 3 analysis .R\nagainst it"]
+    P5 & R3 --> OK{"green?"}
+    OK -- yes --> M["merge / it's safe to run Saturday"]
+    OK -- no --> FIX["fix the code, not the check"]
+    DEP["dependabot (weekly)\nGitHub Actions + pip"] -.-> PUSH
+```
+
+The `CFB_DB` environment variable points both loaders at a scratch database; without it
+they read `data.db` in the repo root. Locally you can reproduce the CI checks with:
+
+```powershell
+pip install ruff
+ruff check cfb_edge.py analysis
+python cfb_edge.py --paper-show --db $env:TEMP\ci.db
+$env:CFB_DB = "$env:TEMP\ci.db"; python analysis/01_paper_roi_ci/paper_roi.py; Rscript analysis/01_paper_roi_ci/paper_roi.R
+Remove-Item Env:CFB_DB
+```
 
 ---
 

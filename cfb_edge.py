@@ -619,9 +619,9 @@ def db_paper_summary(conn: sqlite3.Connection) -> str:
     pend = conn.execute("SELECT COUNT(*) FROM paper_bets WHERE result IS NULL").fetchone()[0]
     out = [f"paper bets — settled by kind/strength (pending: {pend})",
            f"{'kind':<11}{'str':>4}{'n':>5}{'W':>4}{'L':>4}{'P':>4}{'staked':>9}{'profit':>9}{'ROI':>8}"]
-    for kind, st, n, w, l, p, staked, prof in rows:
+    for kind, st, n, w, lost, p, staked, prof in rows:
         roi = (prof / staked * 100) if staked else 0.0
-        out.append(f"{kind:<11}{st:>4}{n:>5}{w or 0:>4}{l or 0:>4}{p or 0:>4}"
+        out.append(f"{kind:<11}{st:>4}{n:>5}{w or 0:>4}{lost or 0:>4}{p or 0:>4}"
                    f"{staked or 0:>9.2f}{prof or 0:>9.2f}{roi:>+7.1f}%")
     if len(out) == 2:
         out.append("(none settled yet — run --snapshot before kickoff and --settle after)")
@@ -841,7 +841,7 @@ def write_report(games: list[Game], bankroll: float, date: dt.date, now: dt.date
          f"**Generated:** {now.strftime('%Y-%m-%d %I:%M %p %Z')}  ",
          f"**Bankroll assumption:** ${bankroll:.0f} · 1/4 Kelly · ${MIN_TICKET:.0f} minimum ticket  ",
          f"**Slate:** {len(games)} games, {len(pre)} not yet kicked, {len(with_fpi)} with both a DK line and an FPI projection  ",
-         f"**Lines:** DraftKings via ESPN (open → current). **Model:** ESPN FPI game predictor (win prob + predicted margin).",
+         "**Lines:** DraftKings via ESPN (open → current). **Model:** ESPN FPI game predictor (win prob + predicted margin).",
          "",
          "> **Honest expectations.** FPI vs the closing line has historically run roughly 50–53% ATS — "
          "at −110 you need 52.4% just to break even. Nothing here is proven +EV yet. Every flagged play "

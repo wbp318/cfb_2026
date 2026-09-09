@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python:
+    name: python smoke (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install runtime + analysis + lint deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r analysis/requirements-py.txt ruff
+
+      # 1. Everything compiles.
+      - name: Compile check
+        run: python -m py_compile cfb_edge.py analysis/_shared/load_data.py analysis/*/*.py
+
+      # 2. Lint. Fix-or-fail: fix the code, don't relax the lint.
+      - name: Lint (ruff)
+        run: ruff check cfb_edge.py analysis
+
+      # 3. CLI parses — catches argparse regressions.
+      - name: CLI parses
+        run: python cfb_edge.py --help > /dev/null
+
+      # 4. SQLite schema bootstraps + migrates on a fresh DB (no network).
+      - name: DB schema bootstrap
+        run: |
+          python cfb_edge.py --paper-show --db "$RUNNER_TEMP/ci.db"
+          python cfb_edge.py --bets-show
+
+      # 5. Analysis scripts run cleanly against the empty DB and say so.
+      - name: Analysis (empty DB)
+        env:
+          CFB_DB: ${{ runner.temp }}/ci.db
+        run: |
+          python analysis/01_paper_roi_ci/paper_roi.py
+          python analysis/02_fpi_calibration/fpi_calibration.py
+          python analysis/03_line_move/line_move.py
+
+  r:
+    name: R twins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.4"
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::DBI
+            any::RSQLite
+            any::dplyr
+            any::boot
+
+      # Bootstrap the schema with the Python tool, then prove the R twins
+      # load it and exit cleanly on an empty ledger.
+      - name: Bootstrap DB
+        run: |
+          pip install -r requirements.txt
+          python cfb_edge.py --paper-show --db "$RUNNER_TEMP/ci.db"
+
+      - name: Analysis (empty DB)
+        env:
+          CFB_DB: ${{ runner.temp }}/ci.db
+        run: |
+          Rscript analysis/01_paper_roi_ci/paper_roi.R
+          Rscript analysis/02_fpi_calibration/fpi_calibration.R
+          Rscript analysis/03_line_move/line_move.R

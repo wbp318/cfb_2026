@@ -13,7 +13,9 @@ suppressPackageStartupMessages({
 })
 
 .shared_dir <- tryCatch(dirname(sys.frame(1)$ofile), error = function(e) "analysis/_shared")
-DEFAULT_DB <- normalizePath(file.path(.shared_dir, "..", "..", "data.db"), mustWork = FALSE)
+# CFB_DB env var overrides the location (CI points it at a scratch DB).
+DEFAULT_DB <- if (nzchar(Sys.getenv("CFB_DB"))) Sys.getenv("CFB_DB") else
+  normalizePath(file.path(.shared_dir, "..", "..", "data.db"), mustWork = FALSE)
 BREAK_EVEN_110 <- 110 / 210      # 52.38% — cover rate needed at -110
 
 # See load_data.py for why "last snapshot" == closing line and why the only
