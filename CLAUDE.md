@@ -97,6 +97,9 @@ bump `FINDINGS_AS_OF`, update the "Before you bet" table in README.md, commit + 
 - `README.md` is canonical and holds the Mermaid diagrams; keep the "Before you bet" table
   current with the latest analysis run.
 - Every commit gets pushed in the same step. Remote: `github.com/wbp318/cfb_2026`.
+- `main` is protected (set 2026-09-09): no force-push, no deletion, the three CI checks must
+  pass; the owner (admin) can bypass the check requirement. Never `push --force` to main;
+  if history needs rewriting, do it on a branch and open a PR.
 - Do not commit `data.db`, `bets.csv`, `snapshot.log`, `analysis/_out/` (gitignored).
 - `.gitattributes` marks every language linguist-detectable on purpose.
 - Honesty in the README is load-bearing. Don't soften "inconclusive" into "promising".
