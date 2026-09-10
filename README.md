@@ -67,6 +67,53 @@ for finished games):
 python cfb_edge.py --date 2026-09-05 --backfill
 ```
 
+### Setting up a fresh Windows machine
+
+Everything is PowerShell. Verify each step before the next.
+
+```powershell
+winget install Python.Python.3.13          # then close + reopen PowerShell
+python --version                           # expect 3.12 or newer (CI tests 3.12 and 3.13)
+
+winget install RProject.R                  # optional: only needed for the R half of the analysis loop
+# then put C:\Program Files\R\R-4.4.2\bin on the PATH — see "Getting Rscript on the PATH" below
+
+winget install Git.Git GitHub.cli          # optional: gh is only for CI/branch-protection admin
+git clone https://github.com/wbp318/cfb_2026.git
+cd cfb_2026
+pip install -r requirements.txt            # runtime: just `requests`
+pip install -r analysis/requirements-py.txt -r requirements-dev.txt   # pandas/numpy + ruff/pytest
+python cfb_edge.py --top 10                # first live run — should print next Saturday's outliers
+python -m pytest -q tests                  # 35 passed
+```
+
+No API keys, no `.env`, nothing to sign up for. If the first live run prints a 403, read
+the User‑Agent note under *Data sources and gotchas*.
+
+### Every flag
+
+| Flag | Does | Touches network? | Writes? |
+|---|---|---|---|
+| *(none)* | full board for next Saturday + top‑10 ranker | yes | no |
+| `--date YYYY-MM-DD` | any date instead of next Saturday (weeknight games work too) | yes | no |
+| `--top N` | ranked outliers only, N rows | yes | no |
+| `--flagged` | board rows that carry at least one tag | yes | no |
+| `--bankroll X` | bankroll for the `$Bet` column (default 100) | — | no |
+| `--no-color` | plain text (auto when piped) | — | no |
+| `--snapshot` | persist games + lines + FPI to `data.db`; paper‑log every strength ≥ 1 play | yes | `data.db` |
+| `--report` | also write `reports/saturday-<date>.md` (implies a snapshot of lines) | yes | `data.db`, `reports/` |
+| `--backfill` | with a **past** `--date`: snapshot closers + pre‑game FPI, paper‑log with `backfill=1`, then settle | yes | `data.db` |
+| `--settle` | refresh scores, grade `paper_bets` and `bets.csv`, print the paper summary | yes | `data.db`, `bets.csv` |
+| `--paper-show` | paper ledger by kind × strength | no | no |
+| `--bets-show` | real‑money ledger with running P&L and ROI | no | no |
+| `--bet ID --kind K --side S --line L --price P --stake $ [--note …]` | append one real ticket to `bets.csv` | yes (to find the game) | `bets.csv` |
+| `--db PATH` | use another SQLite file (CI uses a scratch one) | — | — |
+
+`--bet` rules: `--kind` is `spread`, `ml`, `over` or `under`. `--side` must be the team's
+display name (`"Oklahoma State"`), its ESPN abbreviation is **not** enough for settlement, and
+for `over`/`under` it is ignored. `--line` is the number *you got* from the side's point of view
+(`+22.5` for the dog, `-22.5` for the favorite, `57.5` for a total); `--price` defaults to −110.
+
 ---
 
 ## The full picture
@@ -240,6 +287,49 @@ The board also prints `[steam with]` / `[steam against]` whenever the spread mov
 since open, and `[crosses 3,7]` when the FPI number and the market number sit on opposite
 sides of a key number.
 
+### The arithmetic, with one worked game
+
+Take Cal at Syracuse from the 2026‑09‑12 board: DK has Syracuse −3.5 (−102), moneyline
+SYR −166 / CAL +140, and FPI projects Syracuse to win by 11.6 with an 80% win probability.
+
+```mermaid
+flowchart LR
+    subgraph IN["inputs"]
+        MK["market margin (home)
+= −(home spread) = +3.5"]
+        FM["FPI margin (home) = +11.6"]
+        ML["moneyline −166 / +140"]
+        FP["FPI win % = 80"]
+    end
+    MK & FM --> D["Δ = 11.6 − 3.5 = 8.1 pts
+→ STRONG (≥ 5), side = home"]
+    D --> CP["cover % = Φ(8.1 / 13.5) = Φ(0.60) ≈ 73%"]
+    ML --> DV["implied 62.4% / 41.7% → sum 104.1%
+de‑vig: 60.0% / 40.0%"]
+    DV & FP --> E["ML edge = (80 − 60) / 60 = +33% → STRONG ML"]
+    CP --> K1["Kelly at −102: b = 0.98
+f = (0.73·0.98 − 0.27)/0.98 = 45%
+¼ Kelly = 11% → capped at 5% → $5 on $100"]
+    E --> K2["Kelly at −166: b = 0.60
+f = (0.80·0.60 − 0.20)/0.60 = 47%
+¼ Kelly = 12% → capped → $5"]
+```
+
+- **Market margin** is just the spread with the sign flipped, from the home team's point of view.
+- **Δ** is the disagreement in points. Sign tells you which side FPI likes; size sets the tier.
+- **Cover %** assumes the true margin is normal around FPI's number with SD 13.5 (`MARGIN_SD`).
+  Historically the closer's error in FBS is 13–14 pts; the `02` script reports the live RMSE so
+  the constant can be re‑tuned. This is the biggest modelling assumption in the tool.
+- **De‑vig** divides each implied probability by their sum so the pair adds to 100%. The
+  multiplicative method is used; it slightly favours the dog compared with the "power" method.
+- **Kelly** uses the model probability as the truth, which is exactly the thing the analysis loop
+  is testing. That is why stakes are quarter‑Kelly *and* capped at 5% of bankroll: if FPI is
+  only 53% right instead of 73%, quarter‑Kelly on the wrong number still bleeds slowly instead
+  of fast.
+- **Key numbers** (3, 7, 10, 14) are where FBS margins bunch up. `[crosses 7,10]` means FPI's
+  number and the market's sit on opposite sides of 7 and 10, so a half‑point either way matters
+  more than usual.
+
 ### The weekly loop
 
 ```mermaid
@@ -268,6 +358,19 @@ sequenceDiagram
 `snapshot.bat` is the Task‑Scheduler wrapper: run it every 2–4 h Friday/Saturday so the DB
 holds a near‑opener and a near‑closer for every game (closing‑line‑value tracking).
 
+**Setting up the unattended snapshot** (one‑time, PowerShell as your normal user):
+
+```powershell
+$action  = New-ScheduledTaskAction -Execute "C:\Users\wbp31\cfb_2026\snapshot.bat"
+$trigger = New-ScheduledTaskTrigger -Once -At "06:00" -RepetitionInterval (New-TimeSpan -Hours 3) -RepetitionDuration (New-TimeSpan -Hours 18)
+Register-ScheduledTask -TaskName "cfb_snapshot" -Action $action -Trigger $trigger -Description "cfb_edge --snapshot every 3h"
+```
+
+That fires 6 AM → midnight every day at three‑hour spacing; the tool is cheap enough (about
+170 small HTTP calls) that running it on weekdays too is fine and gives you Tuesday openers.
+`snapshot.log` in the repo folder collects the output; it is gitignored. Delete the task with
+`Unregister-ScheduledTask -TaskName cfb_snapshot`.
+
 ---
 
 ## Reading the board
@@ -282,6 +385,91 @@ sat 02:30pm CAL @ SYR               SYR -3.5 (+1.5)         +11.6   8.1    73  -
 - **Δ / Cov%** — |FPI − market| in points and the implied cover probability of the FPI side.
 - **FPI%** — FPI home win probability, to compare with the moneyline.
 - **Tag / $Bet** — green STRONG, cyan lean/value, red when the market moved against the model. Dollar figure is the quarter‑Kelly ceiling for the `--bankroll` given.
+- **Total (open)** — DK total now, opener in parentheses. `total steam ▲4` means it moved four points since open. There is no totals model; the number is context only.
+- A trailing `[in 14-7]` or `[post 31-24]` means the game has started or finished (away‑home score) and the row is display only — it is never ranked or paper‑logged.
+
+### What the ledgers look like
+
+`--paper-show` after the week 0–1 backfill:
+
+```
+paper bets — settled by kind/strength (pending: 0)
+kind        str    n   W   L   P   staked   profit     ROI
+ml            2    4   2   2   0    17.00     9.10  +53.5%
+ml            1   14   5   9   0    33.00   -18.53  -56.2%
+spread        2    3   1   2   0    15.00    -5.76  -38.4%
+spread        1   13   7   5   1    62.00     7.89  +12.7%
+```
+
+`str` is the strength tier (2 STRONG, 1 lean/value). Stakes are what quarter‑Kelly would have
+put down on a $100 bankroll at the time. Small n, wide swings — exactly why `01` bootstraps a CI
+before anyone reads a per‑row ROI as a signal.
+
+`--bets-show` prints one line per real ticket with `res` (W/L/P, or `·` while pending) and a
+running net, then the settled stake, net and ROI at the bottom.
+
+### What is stored
+
+```mermaid
+erDiagram
+    games ||--o{ snapshots : "many per game (one per --snapshot run)"
+    games ||--o{ paper_bets : "0..n flagged plays"
+    games {
+        text id PK "ESPN event id"
+        text date "kickoff date, America/Chicago"
+        text kickoff_utc
+        int neutral
+        text home_id
+        text home
+        text away_id
+        text away
+        int home_score
+        int away_score
+        int completed "1 once ESPN says final"
+    }
+    snapshots {
+        int id PK
+        text game_id FK
+        text taken_at "ISO, local tz"
+        text provider "DraftKings"
+        real home_spread "negative = home favored"
+        real home_spread_open
+        real total
+        real total_open
+        int home_ml
+        int away_ml
+        real home_fpi_p "0..1"
+        real home_fpi_margin "predicted home margin"
+        real home_fpi "FPI rating, NULL = FCS"
+        real away_fpi
+    }
+    paper_bets {
+        int id PK
+        text game_id FK
+        text logged_at
+        text kind "spread | ml"
+        text side_id
+        text side
+        real line
+        int price "american"
+        real truth_p "model probability used for Kelly"
+        real edge "pts (spread) or % (ml)"
+        int strength "2 strong, 1 lean"
+        real stake "quarter-Kelly at log time"
+        text result "W L P, NULL = pending"
+        real profit
+        int backfill "1 = logged after the fact"
+    }
+```
+
+`bets.csv` (your real tickets) has: `logged_at, date, game_id, matchup, kind, side, line,
+price, stake, result, profit, settled_at, note`. It is a plain CSV so you can open it in
+Excel, but let `--settle` fill `result`/`profit` rather than typing them.
+
+Every `--snapshot` adds a **new** row to `snapshots` rather than updating, so the table is a
+time series of the line. `analysis/_shared/load_data` takes the last row per game as "the
+closer"; the first row is your best proxy for "where you could have bet". The gap between the
+two is closing‑line value, the most reliable early indicator of whether a bettor has an edge.
 
 ---
 
@@ -384,8 +572,6 @@ $env:PATH += ';C:\Program Files\R\R-4.4.2\bin'
 Rscript --version
 ```
 
-When you upgrade R the folder name changes (e.g. `R-4.5.0`) — repeat with the new path.
-
 ```powershell
 pip install -r analysis/requirements-py.txt
 python analysis/01_paper_roi_ci/paper_roi.py
@@ -450,6 +636,56 @@ Remove-Item Env:CFB_DB
 - **ESPN powerindex** `site.web.api.espn.com/apis/fitt/v3/.../powerindex` — 138 FBS teams. A team missing here is FCS; the tool uses that as the "don't trust the edge" flag.
 - **User‑Agent**: a full Chrome UA string gets a **403** from ESPN's Akamai edge; a plain `Mozilla/5.0` passes. Don't "improve" it.
 - **Not used**: CollegeFootballData (needs a key), The Odds API (needs a key), Massey (403 to scripts). Multi‑book line shopping would need one of the keyed APIs — the hook is `_apply_core_odds`.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `403 Client Error: Forbidden` on the first fetch | ESPN's Akamai edge rejects browser‑looking User‑Agent strings from non‑browsers | leave `UA = {"User-Agent": "Mozilla/5.0"}` alone; if ESPN changes again, try the bare `requests` default |
+| `UnicodeEncodeError: 'charmap' codec` | Windows console is cp1252; output has Δ, ≥, → | already handled in `main()` and the analysis loader; if you see it, you are on a very old Python — upgrade |
+| `0 games · 0 with DK line` | wrong date, or ESPN has not published the slate | check `--date`; weeknight dates only have a few games; FCS‑only days show nothing under `groups=80` |
+| board has FPI but `—` for the spread | DK has not posted that game yet (common Sunday–Tuesday for small conferences) | re‑run later; `--snapshot` records whatever exists |
+| a huge Δ on a game you have never heard of | FCS opponent; FPI's rating for them is a placeholder | expected — it is shown but never ranked or staked (`⚠non-FBS side`) |
+| `--settle` grades nothing | games not final yet, or `data.db` has no `games` rows for that date | run after Sunday morning; make sure a `--snapshot` (or `--backfill`) captured the date first |
+| `Rscript` not recognized | not on PATH | see the PATH section |
+| `package 'RSQLite' is not available` | not installed in this R | `Rscript -e 'install.packages(readLines("analysis/requirements-r.txt"), repos="https://cloud.r-project.org")'` |
+| Python and R print different numbers | a real bug in one of them | the SQL, bins and Wilson formula must be identical; diff the two files, fix the wrong one, add a test |
+
+## Glossary
+
+- **ATS** — against the spread. A −3.5 favorite "covers" by winning by 4+.
+- **ML** — moneyline, a bet on who wins. `−166` risks 166 to win 100; `+140` risks 100 to win 140.
+- **Opener / closer** — the first line a book posts and the last one before kickoff. The closer
+  is the sharpest public estimate of the game; beating it consistently (**CLV**, closing line
+  value) is the standard test of a real edge.
+- **Steam** — a fast line move from sharp money or news. `[steam with]` means it moved toward
+  FPI's side; `[steam against]` means away.
+- **Key numbers** — margins FBS games land on most: 3, 7, 10, 14. Crossing one is worth more
+  than the half‑point suggests.
+- **De‑vig** — remove the bookmaker's margin so the two moneylines sum to 100%.
+- **Kelly** — the stake fraction that maximises long‑run growth if your probability is right;
+  quarter‑Kelly is the usual hedge against it being wrong.
+- **FPI** — ESPN's Football Power Index: a rating per team plus a per‑game win probability and
+  predicted margin. Public, keyless, updated overnight.
+- **Δ (delta)** — |FPI margin − market margin| in points. Our single biggest input.
+- **Paper bet** — a play the tool would have made, recorded and graded with no money on it.
+- **Wilson interval** — a confidence interval for a proportion that behaves on small n; used
+  for every cover‑rate and calibration bin in `analysis/`.
+- **Bootstrap** — resample the bets with replacement 5,000× to get a CI on ROI without assuming
+  a distribution.
+
+## Roadmap (only if the numbers earn it)
+
+- **Multi‑book line shopping.** ESPN exposes only DraftKings. A keyed API (CollegeFootballData
+  or The Odds API, both free tiers) would add FanDuel/Caesars/BetMGM and turn "FPI vs DK" into
+  "FPI vs the best available number". The adapter hook is `_apply_core_odds`.
+- **CLV report.** `snapshots` already holds the time series; a `04_clv/` twin that compares the
+  line at paper‑log time with the closer would answer "are we beating the close?" before the
+  win/loss sample is large enough to say anything.
+- **Totals model.** None today; `total steam` is context only. Off/def efficiency from the
+  powerindex is captured but unused.
+- **Blend.** `02` reports a 50/50 FPI+closer RMSE. If the blend beats both, `MARGIN_SD` and the
+  side selection should use it. Only after both runtimes agree on more than a month of data.
 
 ## Files
 
