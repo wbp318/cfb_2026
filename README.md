@@ -69,6 +69,120 @@ python cfb_edge.py --date 2026-09-05 --backfill
 
 ---
 
+## The full picture
+
+Six moving parts. One of them talks to the internet (`cfb_edge.py`), one holds the truth
+(`data.db`), and everything else exists to check that the first one is not fooling you.
+
+```mermaid
+flowchart TB
+    subgraph LIVE["1 · Saturday tool — cfb_edge.py (the only thing that touches the internet)"]
+        direction LR
+        ESPN(("ESPN\nscoreboard · odds\npredictor · powerindex")) --> FETCH["fetch + enrich\n→ list[Game]"]
+        FETCH --> SIG["signals\nATS · ML · line move · total move"]
+        SIG --> OUT["terminal board\n--top ranker\nreports/saturday-DATE.md"]
+    end
+
+    subgraph STORE["2 · Storage (local only, gitignored)"]
+        DB[("data.db\ngames · snapshots · paper_bets")]
+        CSV[("bets.csv\nreal tickets you placed")]
+    end
+
+    subgraph CHECK["3 · Analysis loop — analysis/ (offline, read-only, Python AND R)"]
+        direction LR
+        L["_shared/load_data\n.py ⇄ .R"] --> A1["01 paper ROI\nbootstrap CI"]
+        L --> A2["02 FPI calibration\nRMSE vs closer · cover % by Δ"]
+        L --> A3["03 line move\nfollow-the-money"]
+        A1 & A2 & A3 --> AGREE{"Python == R?"}
+    end
+
+    subgraph GUARD["4 · Guard rails (no internet, no real data)"]
+        direction LR
+        T["tests/\npytest · 35 cases\nodds math · signals · grading · SQLite"]
+        CI["GitHub Actions\npy 3.12 + 3.13 · R 4.4\nlint · tests · empty-DB runs"]
+    end
+
+    subgraph SCHED["5 · Unattended"]
+        BAT["snapshot.bat\nTask Scheduler, Fri/Sat every 2–4 h"]
+    end
+
+    subgraph DOCS["6 · Docs + constants"]
+        K["constants block in cfb_edge.py\nSPREAD_OUTLIER_PTS · MARGIN_SD · STEAM_PTS …\nFINDINGS_AS_OF"]
+        R["README 'Before you bet' table\nbetting_guide.md"]
+    end
+
+    SIG -->|"--snapshot / --backfill\nlines + FPI + flagged plays"| DB
+    OUT -->|"--bet (you type it)"| CSV
+    ESPN -->|"--settle: final scores"| DB
+    DB -->|"--settle grades"| CSV
+    BAT -->|runs --snapshot| LIVE
+    DB --> L
+    AGREE -- yes --> K
+    AGREE -- no --> BUG["fix the wrong runtime"]
+    K -.->|thresholds| SIG
+    K --> R
+    T -.->|"imports and exercises"| LIVE
+    CI -.->|"runs on every push"| T
+    CI -.->|"runs on every push"| CHECK
+```
+
+**How to read it.** Saturday morning the tool pulls ESPN, scores every game with the four
+signals, prints the board, and (with `--snapshot`) writes the lines, the FPI numbers and
+every flagged play into `data.db`. You place tickets by hand and log them with `--bet`.
+Sunday `--settle` pulls finals and grades both the paper plays and your real tickets. The
+analysis scripts then read `data.db` in two languages; when they agree, their verdicts are
+the only thing allowed to change the thresholds at the top of `cfb_edge.py`. Tests and CI
+sit outside the loop and make sure a code change did not silently change what a "STRONG
+ATS" means.
+
+### Inside `cfb_edge.py` — what each flag does
+
+```mermaid
+flowchart TD
+    START["python cfb_edge.py [flags]"] --> ARGS{"which flag?"}
+
+    ARGS -->|"--bets-show"| BS["read bets.csv\nprint ledger + running ROI"] --> END
+    ARGS -->|"--paper-show"| PS["open data.db\nprint paper_bets by kind × strength"] --> END
+
+    ARGS -->|"anything else"| F1["fetch_scoreboard(date)\nscoreboard → 80 Game objects\nteams · records · kickoff · status · DK line"]
+    F1 --> F2["enrich_games()\n8 threads: per game\n· core odds → open + current spread/total/ML\n· predictor → FPI win % + predicted margin"]
+    F2 --> F3["fetch_powerindex() + apply\nFPI rating/rank per team\n(missing = FCS)"]
+    F3 --> BRANCH{"flag?"}
+
+    BRANCH -->|"--bet ID …"| B1["find game, append row to bets.csv"] --> END
+
+    BRANCH -->|"--snapshot"| S1["db_persist: games + snapshots rows"] --> S2["db_paper_log: every strength≥1 play\nwith truth_p, price, stake"] --> RENDER
+    BRANCH -->|"--backfill (past date)"| BF["same as --snapshot but games are final:\n'current' = closer · FPI = game-morning run\npaper_bets.backfill = 1"] --> ST
+    BRANCH -->|"--settle"| ST["db_persist (scores) →\ndb_settle_paper: grade W/L/P + profit\nsettle_bets: grade bets.csv"] --> END
+    BRANCH -->|"default / --top / --flagged"| RENDER
+
+    RENDER["for each game:\nspread_signal · ml_signal\nspread_move_signal · total_move_signal"] --> R1["render_board (all games)\nor render_top (ranked, strength → steam → edge)"]
+    R1 --> REP{"--report?"}
+    REP -->|yes| W["write_report → reports/saturday-DATE.md"] --> END
+    REP -->|no| END((done))
+```
+
+### Inside `analysis/` — what each script asks
+
+```mermaid
+flowchart LR
+    DB[("data.db")] --> LG["load_games()\none row per settled FBS-vs-FBS game\nlast snapshot = closer\nderived: home_margin · market_margin\nfpi_delta · ats_margin · fpi_side_covered"]
+    DB --> LB["load_paper_bets()\none row per graded paper play\npnl_flat = flat $1 result"]
+
+    LB --> S1["01 paper_roi\nQ: does betting what the tool flags make money?\nflat ROI by kind × strength\n5,000-rep bootstrap 95% CI\nverdict: PROFITABLE / losing / inconclusive"]
+    LG --> S2["02 fpi_calibration\nQ-A: when FPI says 70%, do they win 70%? (Wilson bins)\nQ-B: whose margin is closer to the truth — FPI or DK? (RMSE)\nQ-C: does the FPI side cover, by |Δ| bucket? (vs 52.4%)"]
+    LG --> S3["03 line_move\nQ-A: does the side the line moved toward cover?\nQ-B: FPI side cover % when steam is WITH vs AGAINST it"]
+
+    S1 & S2 & S3 --> OUTC["analysis/_out/*.csv\n(gitignored)"]
+    S1 & S2 & S3 --> STD["stdout tables\nsame numbers in .py and .R"]
+```
+
+The R and Python versions of each script share the same SQL string, the same bins, and the
+same closed-form Wilson interval, so their point estimates must be identical. Only the
+bootstrap CIs in `01` are allowed to differ in the last digit.
+
+---
+
 ## How it works
 
 ```mermaid
@@ -300,8 +414,9 @@ flowchart LR
     PUSH["git push / PR"] --> PY["python job\n(3.12 and 3.13 matrix)"]
     PUSH --> RJ["R job\n(r-lib/actions, R 4.4)"]
     PY --> P1["py_compile\ncfb_edge.py + analysis/*.py"]
-    P1 --> P2["ruff check\n(fix-or-fail — never relax the lint)"]
-    P2 --> P3["cfb_edge.py --help\n(argparse still parses)"]
+    P1 --> P2["ruff check\n(rule set pinned in ruff.toml)"]
+    P2 --> PT["pytest tests/\n35 cases · no network"]
+    PT --> P3["cfb_edge.py --help\n(argparse still parses)"]
     P3 --> P4["--paper-show --db scratch.db\n(SCHEMA + MIGRATIONS bootstrap)"]
     P4 --> P5["run all 3 analysis .py\nagainst the empty scratch DB\nCFB_DB env var"]
     RJ --> R1["install DBI · RSQLite · dplyr · boot"]
@@ -317,8 +432,9 @@ The `CFB_DB` environment variable points both loaders at a scratch database; wit
 they read `data.db` in the repo root. Locally you can reproduce the CI checks with:
 
 ```powershell
-pip install ruff
-ruff check cfb_edge.py analysis
+pip install -r requirements-dev.txt
+ruff check cfb_edge.py analysis tests
+python -m pytest -q tests
 python cfb_edge.py --paper-show --db $env:TEMP\ci.db
 $env:CFB_DB = "$env:TEMP\ci.db"; python analysis/01_paper_roi_ci/paper_roi.py; Rscript analysis/01_paper_roi_ci/paper_roi.R
 Remove-Item Env:CFB_DB
@@ -343,6 +459,9 @@ Remove-Item Env:CFB_DB
 | `betting_guide.md` | live‑play reference: thresholds, what to fire on, discipline |
 | `CLAUDE.md` | conventions for Claude Code |
 | `analysis/` | Python + R twins, offline, read‑only |
+| `tests/` | pytest unit tests, no network — run `python -m pytest -q tests` |
+| `.github/` | CI workflow + dependabot |
+| `ruff.toml`, `requirements-dev.txt` | lint config and dev deps (ruff, pytest) |
 | `reports/` | `saturday-<date>.md` — what the tool said before kickoff |
 | `snapshot.bat` | Task Scheduler wrapper |
 | `data.db`, `bets.csv` | local only, gitignored |

@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _shared.load_data import BREAK_EVEN_110, load_games, wilson  # noqa: E402
+from _shared.load_data import BREAK_EVEN_110, load_games, wilson
 
 OUT_DIR = Path(__file__).resolve().parents[1] / "_out"
 PROB_BINS = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0001]
