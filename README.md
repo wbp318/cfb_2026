@@ -67,6 +67,23 @@ for finished games):
 python cfb_edge.py --date 2026-09-05 --backfill
 ```
 
+### The GUI (optional)
+
+Everything above also has a point-and-click front end. It is a local web page served by
+the Python standard library — no extra install, nothing leaves your machine:
+
+```powershell
+python cfb_gui.py                 # serves http://127.0.0.1:8765 and opens your browser
+python cfb_gui.py --port 9000 --no-browser
+```
+
+Tabs: **Board** (sortable, filter to flagged / not-kicked), **Top plays** (ranked outliers
+with a *bet…* button that pre-fills the ticket form), **Paper ledger**, **Real bets**
+(log a ticket = `--bet`), **Actions** (snapshot / settle / report / backfill, each asks
+before writing). It imports `cfb_edge.py` and calls the same functions the CLI does, so a
+number on the page is the number the terminal prints. Pressing *Load slate* reuses the
+last fetch; *Refresh* goes back to ESPN. Actions always re-fetch first, exactly like the CLI.
+
 ### Setting up a fresh Windows machine
 
 Everything is PowerShell. Verify each step before the next.
@@ -692,6 +709,7 @@ Remove-Item Env:CFB_DB
 | File | What |
 |---|---|
 | `cfb_edge.py` | the tool — everything lives here, section headers navigate it |
+| `cfb_gui.py` | optional local browser dashboard over `cfb_edge.py` (stdlib only) |
 | `betting_guide.md` | live‑play reference: thresholds, what to fire on, discipline |
 | `CLAUDE.md` | conventions for Claude Code |
 | `analysis/` | Python + R twins, offline, read‑only |

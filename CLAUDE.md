@@ -22,6 +22,7 @@ python cfb_edge.py --date 2026-09-05 --backfill   # seed DB from a finished week
 python cfb_edge.py --settle               # Sunday: grade paper + real bets
 python cfb_edge.py --paper-show / --bets-show
 python cfb_edge.py --bet <id> --kind spread --side "Team" --line 3.5 --price -110 --stake 5
+python cfb_gui.py                         # local browser dashboard, same functions
 
 python analysis/01_paper_roi_ci/paper_roi.py      # and the .R twin via Rscript
 ```
@@ -29,7 +30,7 @@ python analysis/01_paper_roi_ci/paper_roi.py      # and the .R twin via Rscript
 CI (`.github/workflows/ci.yml`) runs on every push: py_compile, `ruff check` (fix the code,
 never relax the lint), `--help`, schema bootstrap on a scratch DB, and all three analysis
 scripts in both Python and R against that empty DB via the `CFB_DB` env var. Run
-`ruff check cfb_edge.py analysis tests` and `python -m pytest -q tests` before pushing.
+`ruff check cfb_edge.py cfb_gui.py analysis tests` and `python -m pytest -q tests` before pushing.
 `ruff.toml` pins the rule set (E4/E7/E9/F) so a ruff upgrade in CI can't move the goalposts.
 
 **Unit tests** live in `tests/test_cfb_edge.py` (35 cases, no network): odds math, every
@@ -43,7 +44,10 @@ the point estimates match. `Rscript` is at `C:\Program Files\R\R-4.4.2\bin` (not
 
 ## Architecture
 
-**Everything is in `cfb_edge.py`** (~1,000 lines). Sections: odds math → ESPN adapters →
+**Everything is in `cfb_edge.py`** (~1,000 lines). `cfb_gui.py` is a stdlib `http.server`
+dashboard that imports it; it must never recompute a signal or duplicate a rule — add
+logic to `cfb_edge.py` and have the GUI call it. Its tests are `tests/test_cfb_gui.py`.
+Sections of `cfb_edge.py`: odds math → ESPN adapters →
 signals → SQLite → bets ledger → rendering → report → main. Don't split it without asking.
 
 **Data flow:** `fetch_scoreboard` → `enrich_games` (parallel core-odds + predictor per game)
