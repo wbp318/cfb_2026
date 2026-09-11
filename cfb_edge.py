@@ -418,8 +418,10 @@ def ml_signal(g: Game) -> Optional[Signal]:
         strength = 2 if edge >= ML_STRONG_PCT else 1 if edge >= ML_EDGE_PCT else 0
         if side.ml > ML_MAX_PRICE or side.ml < ML_MIN_PRICE:
             strength = 0
-        if side.ml > 250 or g.home.fpi is None or g.away.fpi is None:
+        if side.ml > 250:
             strength = min(strength, 1)
+        if g.home.fpi is None or g.away.fpi is None:
+            strength = 0        # FCS side: same rule as ATS — never ranked, never staked
         label = {2: "STRONG ML", 1: "ML value", 0: ""}[strength]
         s = Signal(g, "ml", side, label, strength, edge, side.fpi_win_p, side.ml)
         if best is None or s.edge > best.edge:
@@ -794,6 +796,63 @@ def ranked_signals(games: list[Game], include_done: bool = False) -> list[Signal
     return sorted(sigs, key=key)
 
 
+MAX_PICKS = 5                     # betting_guide §4: 3-5 tickets per Saturday
+
+
+def pick_signals(games: list[Game], bankroll: float, n: int = MAX_PICKS) -> list[tuple[Signal, float]]:
+    """The 'good picks' board: ranked model signals that clear every rule in betting_guide.md.
+
+    ATS / ML only (never market-only signals), strength >= 1, a positive quarter-Kelly stake,
+    no ⚠ warning (market-moved-against, long-dog, blowout-number, non-FBS), one ticket per
+    game (the higher-ranked signal wins), at most `n` tickets. Empty list = no play today.
+    """
+    out: list[tuple[Signal, float]] = []
+    seen: set[str] = set()
+    for s in ranked_signals(games):
+        if s.kind not in ("spread", "ml") or s.game.id in seen:
+            continue
+        if findings_warnings(s):
+            continue
+        st = stake_for(s, bankroll)
+        if not st:
+            continue
+        out.append((s, st))
+        seen.add(s.game.id)
+        if len(out) >= n:
+            break
+    return out
+
+
+def _pick_row(s: Signal) -> tuple[str, str, str]:
+    """(play, why, confirmations) for one pick — shared by the terminal and the report."""
+    g = s.game
+    if s.kind == "spread":
+        play = f"{s.side.name} {fmt_spread(s.line)} ({fmt_ml(s.price)})"
+        why = (f"FPI margin {g.home.fpi_margin:+.1f} home vs market {market_margin_home(g):+.1f}"
+               f" → Δ{s.edge:.1f}, cover {s.truth_p*100:.0f}%")
+    else:
+        fair = devig_pair(g.home.ml, g.away.ml)[0 if s.side is g.home else 1]
+        play = f"{s.side.name} ML {fmt_ml(s.price)}"
+        why = f"FPI {s.truth_p*100:.0f}% vs fair {fair*100:.0f}% → +{s.edge:.0f}%"
+    conf = " ".join(x for x in (f"[steam {s.steam}]" if s.steam else "",
+                                f"[{s.key_note}]" if s.key_note else "") if x)
+    return play, why, conf
+
+
+def render_picks(games: list[Game], bankroll: float, color: bool) -> str:
+    picks = pick_signals(games, bankroll)
+    if not picks:
+        return "Picks board: no play clears every rule today — that is a valid answer."
+    out = [f"Picks board — {len(picks)} ticket(s) that clear every rule — bankroll ${bankroll:.0f}, 1/4 Kelly"]
+    for i, (s, st) in enumerate(picks, 1):
+        g = s.game
+        kick = g.kick_local.strftime("%a %I:%M%p").lower()
+        play, why, conf = _pick_row(s)
+        out.append(_c(f"{i:>2}. {s.label:<11}", _tag_color(s), color) +
+                   f"{kick:<12}{g.short:<14} {play}  {why}  ${st:.0f} {conf}")
+    return "\n".join(out)
+
+
 def render_top(games: list[Game], bankroll: float, color: bool, n: int = 12) -> str:
     sigs = ranked_signals(games)[:n]
     if not sigs:
@@ -829,14 +888,20 @@ def render_top(games: list[Game], bankroll: float, color: bool, n: int = 12) -> 
 # ---- report ----
 # =====================================================================
 
+def report_path(date: dt.date) -> str:
+    """reports/saturday-<date>.md on Saturdays (the historical name); reports/<weekday>-<date>.md otherwise."""
+    return os.path.join(REPORTS_DIR, f"{date.strftime('%A').lower()}-{date.isoformat()}.md")
+
+
 def write_report(games: list[Game], bankroll: float, date: dt.date, now: dt.datetime,
                  paper_summary: str) -> str:
     os.makedirs(REPORTS_DIR, exist_ok=True)
-    path = os.path.join(REPORTS_DIR, f"saturday-{date.isoformat()}.md")
+    path = report_path(date)
     sigs = ranked_signals(games)
+    picks = pick_signals(games, bankroll)
     pre = [g for g in games if g.status == "pre"]
     with_fpi = [g for g in pre if g.home.fpi_margin is not None and g.home.spread is not None]
-    L = [f"# CFB Outlier Report — Saturday, {date.strftime('%B %d, %Y')}",
+    L = [f"# CFB Outlier Report — {date.strftime('%A, %B %d, %Y')}",
          "",
          f"**Generated:** {now.strftime('%Y-%m-%d %I:%M %p %Z')}  ",
          f"**Bankroll assumption:** ${bankroll:.0f} · 1/4 Kelly · ${MIN_TICKET:.0f} minimum ticket  ",
@@ -849,6 +914,21 @@ def write_report(games: list[Game], bankroll: float, date: dt.date, now: dt.date
          "tell us whether the FPI-vs-DK gap is real money or noise. Bet small, bet flat-ish, and treat the "
          "first month as data collection.",
          "",
+         "## 0. Picks board",
+         "",
+         "Tickets that clear **every** rule in `betting_guide.md`: FBS vs FBS, ATS or ML only, "
+         "no ⚠ flag, positive quarter-Kelly stake, one per game, max 5. Everything else on this "
+         "page is context.",
+         "",
+         "| # | Tag | Kick (CT) | Game | Play | Why | $Bet | Confirmations |",
+         "|---|---|---|---|---|---|---|---|"]
+    for i, (s, st) in enumerate(picks, 1):
+        play, why, conf = _pick_row(s)
+        L.append(f"| {i} | **{s.label}** | {s.game.kick_local.strftime('%I:%M %p').lstrip('0')} | "
+                 f"{s.game.short} | {play} | {why} | ${st:.0f} | {conf or '—'} |")
+    if not picks:
+        L.append("| — | no ticket clears every rule today | | | | | | |")
+    L += ["",
          "## 1. Ranked outliers",
          "",
          "| # | Tag | Kick (CT) | Game | Play | Model vs market | Cover/Win % | Steam | $Bet | Flags |",
@@ -924,6 +1004,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--date", help="YYYY-MM-DD (default: next Saturday)")
     p.add_argument("--top", type=int, metavar="N", help="ranked outliers only")
     p.add_argument("--flagged", action="store_true", help="board rows with a tag only")
+    p.add_argument("--picks", action="store_true", help="picks board: only tickets that clear every rule")
     p.add_argument("--bankroll", type=float, default=100.0)
     p.add_argument("--no-color", action="store_true")
     p.add_argument("--snapshot", action="store_true", help="persist lines/FPI to data.db + paper-log flagged plays")
@@ -931,7 +1012,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--backfill", action="store_true",
                    help="with --date in the past: snapshot closers + pre-game FPI, paper-log, settle")
     p.add_argument("--paper-show", action="store_true", help="paper-bet ledger summary")
-    p.add_argument("--report", action="store_true", help="write reports/saturday-<date>.md")
+    p.add_argument("--report", action="store_true", help="write reports/<weekday>-<date>.md")
     p.add_argument("--db", default=DEFAULT_DB)
     # real-money ledger
     p.add_argument("--bet", metavar="GAME_ID", help="log a placed bet (with --kind/--side/--line/--price/--stake)")
@@ -1003,12 +1084,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(db_paper_summary(conn))
         return 0
 
-    if a.top:
+    if a.picks:
+        print(render_picks(games, a.bankroll, color))
+    elif a.top:
         print(render_top(games, a.bankroll, color, a.top))
     else:
         print(render_board(games, a.bankroll, color, only_flagged=a.flagged))
         print()
         print(render_top(games, a.bankroll, color, 10))
+        print()
+        print(render_picks(games, a.bankroll, color))
     if a.report:
         path = write_report(games, a.bankroll, date, now, db_paper_summary(conn))
         print(f"\nreport → {path}")

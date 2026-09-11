@@ -17,7 +17,7 @@ usage and the diagrams; `betting_guide.md` has the play rules.**
 pip install -r requirements.txt
 python cfb_edge.py                        # board + top-10, next Saturday
 python cfb_edge.py --top 15               # ranked outliers only
-python cfb_edge.py --snapshot --report    # persist + paper-log + reports/saturday-<date>.md
+python cfb_edge.py --snapshot --report    # persist + paper-log + reports/<weekday>-<date>.md
 python cfb_edge.py --date 2026-09-05 --backfill   # seed DB from a finished week
 python cfb_edge.py --settle               # Sunday: grade paper + real bets
 python cfb_edge.py --paper-show / --bets-show
@@ -33,10 +33,10 @@ scripts in both Python and R against that empty DB via the `CFB_DB` env var. Run
 `ruff check cfb_edge.py cfb_gui.py analysis tests` and `python -m pytest -q tests` before pushing.
 `ruff.toml` pins the rule set (E4/E7/E9/F) so a ruff upgrade in CI can't move the goalposts.
 
-**Unit tests** live in `tests/test_cfb_edge.py` (35 cases, no network): odds math, every
+**Unit tests** live in `tests/test_cfb_edge.py` (42 cases, no network): odds math, every
 signal function including the demotions (FCS, blowout, steam-against, long-dog), Kelly cap,
 ranking order, `_grade`/`_profit` for spread/ML/total, a full SQLite persist → paper-log →
-settle round trip on a tmp DB, the column migration, the bets.csv ledger, and Wilson-interval
+settle round trip on a tmp DB, the column migration, the bets.csv ledger, the picks-board filter, the day-aware report name, and Wilson-interval
 parity with the analysis loader. When you change a threshold or add a demotion, add a case.
 Also verify by running the board for next Saturday and one `--backfill`
 of a past Saturday, then running all three analysis scripts in **both** runtimes and checking

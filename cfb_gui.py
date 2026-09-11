@@ -409,7 +409,7 @@ form.bet label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:v
     (<code>--snapshot</code>). Run Friday and again Saturday morning.</p><button data-act="snapshot">Run snapshot</button></div>
    <div class="card"><h3>Settle</h3><p>Refresh scores, grade paper bets and bets.csv (<code>--settle</code>). Sunday.</p>
     <button data-act="settle">Run settle</button></div>
-   <div class="card"><h3>Report</h3><p>Snapshot + write <code>reports/saturday-&lt;date&gt;.md</code> (<code>--report</code>).</p>
+   <div class="card"><h3>Report</h3><p>Snapshot + write <code>reports/&lt;weekday&gt;-&lt;date&gt;.md</code> (<code>--report</code>).</p>
     <button data-act="report">Write report</button></div>
    <div class="card"><h3>Backfill</h3><p>For a <b>past</b> Saturday: closers + pre-game FPI, paper-log with backfill=1,
     settle (<code>--backfill</code>).</p><button data-act="backfill">Run backfill</button></div>

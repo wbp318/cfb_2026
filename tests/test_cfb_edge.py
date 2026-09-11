@@ -297,3 +297,45 @@ def test_wilson_matches_known_value():
     p, lo, hi = wilson(7, 13)
     assert p == pytest.approx(7 / 13)
     assert (lo, hi) == pytest.approx((0.2914, 0.7680), abs=1e-3)
+
+
+# ---------------------------------------------------------------- picks board / day-aware report
+
+def test_ml_signal_fcs_side_is_never_staked():
+    g = make_game(home_ml=-160, away_ml=+140, fpi_home_p=0.75, away_fpi=None)    # would be STRONG ML
+    assert ce.ml_signal(g).strength == 0
+    assert ce.stake_for(ce.ml_signal(g), 100.0) is None
+
+
+def test_pick_signals_filters_to_clean_stakeable_tickets():
+    clean = make_game(home_spread=-3.5, fpi_home_margin=11.0)                      # STRONG ATS, no flags
+    against = make_game(home_spread=-3.5, home_spread_open=-6.5, fpi_home_margin=11.0)  # steam against
+    against.id = "g2"
+    fcs = make_game(home_spread=-40.5, fpi_home_margin=25.0, away_fpi=None)
+    fcs.id = "g3"
+    started = make_game(home_spread=-3.5, fpi_home_margin=11.0, status="in")
+    started.id = "g4"
+    picks = ce.pick_signals([against, fcs, started, clean], 100.0)
+    assert [s.game.id for s, _ in picks] == ["g1"]              # one ticket per game, only the clean one
+    s, st = picks[0]
+    assert s.kind == "spread" and s.strength == 2 and st == ce.stake_for(s, 100.0)
+    assert ce.pick_signals([against, fcs], 100.0) == []
+    assert "no play" in ce.render_picks([against], 100.0, False)
+    assert "Home U -3.5" in ce.render_picks([clean], 100.0, False)
+
+
+def test_pick_signals_respects_max_and_report_is_day_aware(tmp_path, monkeypatch):
+    games = []
+    for i in range(8):
+        g = make_game(home_spread=-3.5, fpi_home_margin=11.0)
+        g.id = f"p{i}"
+        games.append(g)
+    assert len(ce.pick_signals(games, 100.0)) == ce.MAX_PICKS
+    monkeypatch.setattr(ce, "REPORTS_DIR", str(tmp_path))
+    now = dt.datetime(2026, 9, 11, 12, 0, tzinfo=ce.LOCAL_TZ)
+    fri = ce.write_report(games, 100.0, dt.date(2026, 9, 11), now, "ledger")
+    sat = ce.write_report(games, 100.0, dt.date(2026, 9, 12), now, "ledger")
+    assert fri.endswith("friday-2026-09-11.md") and sat.endswith("saturday-2026-09-12.md")
+    txt = open(fri, encoding="utf-8").read()
+    assert "Friday, September 11, 2026" in txt and "## 0. Picks board" in txt
+    assert txt.count("| **STRONG ATS** |") >= ce.MAX_PICKS

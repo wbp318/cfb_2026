@@ -40,7 +40,7 @@ python cfb_edge.py                       # full Saturday board + top-10 outliers
 python cfb_edge.py --top 15              # ranked outliers only
 python cfb_edge.py --flagged             # board rows that carry a tag
 python cfb_edge.py --bankroll 250        # resize the $Bet column
-python cfb_edge.py --snapshot --report   # persist lines + FPI, paper-log plays, write reports/saturday-<date>.md
+python cfb_edge.py --snapshot --report   # persist lines + FPI, paper-log plays, write reports/<weekday>-<date>.md
 python cfb_edge.py --date 2026-09-19     # any date (default: next Saturday)
 ```
 
@@ -101,7 +101,7 @@ cd cfb_2026
 pip install -r requirements.txt            # runtime: just `requests`
 pip install -r analysis/requirements-py.txt -r requirements-dev.txt   # pandas/numpy + ruff/pytest
 python cfb_edge.py --top 10                # first live run — should print next Saturday's outliers
-python -m pytest -q tests                  # 35 passed
+python -m pytest -q tests                  # 42 passed
 ```
 
 No API keys, no `.env`, nothing to sign up for. If the first live run prints a 403, read
@@ -115,10 +115,11 @@ the User‑Agent note under *Data sources and gotchas*.
 | `--date YYYY-MM-DD` | any date instead of next Saturday (weeknight games work too) | yes | no |
 | `--top N` | ranked outliers only, N rows | yes | no |
 | `--flagged` | board rows that carry at least one tag | yes | no |
+| `--picks` | picks board only: ATS/ML tickets that clear every rule in `betting_guide.md` (FBS vs FBS, no ⚠ flag, positive stake, one per game, max 5) | yes | no |
 | `--bankroll X` | bankroll for the `$Bet` column (default 100) | — | no |
 | `--no-color` | plain text (auto when piped) | — | no |
 | `--snapshot` | persist games + lines + FPI to `data.db`; paper‑log every strength ≥ 1 play | yes | `data.db` |
-| `--report` | also write `reports/saturday-<date>.md` (implies a snapshot of lines) | yes | `data.db`, `reports/` |
+| `--report` | also write `reports/<weekday>-<date>.md` (implies a snapshot of lines) | yes | `data.db`, `reports/` |
 | `--backfill` | with a **past** `--date`: snapshot closers + pre‑game FPI, paper‑log with `backfill=1`, then settle | yes | `data.db` |
 | `--settle` | refresh scores, grade `paper_bets` and `bets.csv`, print the paper summary | yes | `data.db`, `bets.csv` |
 | `--paper-show` | paper ledger by kind × strength | no | no |
@@ -144,7 +145,7 @@ flowchart TB
         direction LR
         ESPN(("ESPN\nscoreboard · odds\npredictor · powerindex")) --> FETCH["fetch + enrich\n→ list[Game]"]
         FETCH --> SIG["signals\nATS · ML · line move · total move"]
-        SIG --> OUT["terminal board\n--top ranker\nreports/saturday-DATE.md"]
+        SIG --> OUT["terminal board\n--top ranker\nreports/WEEKDAY-DATE.md"]
     end
 
     subgraph STORE["2 · Storage (local only, gitignored)"]
@@ -162,7 +163,7 @@ flowchart TB
 
     subgraph GUARD["4 · Guard rails (no internet, no real data)"]
         direction LR
-        T["tests/\npytest · 35 cases\nodds math · signals · grading · SQLite"]
+        T["tests/\npytest · 42 cases\nodds math · signals · grading · SQLite"]
         CI["GitHub Actions\npy 3.12 + 3.13 · R 4.4\nlint · tests · empty-DB runs"]
     end
 
@@ -222,7 +223,7 @@ flowchart TD
 
     RENDER["for each game:\nspread_signal · ml_signal\nspread_move_signal · total_move_signal"] --> R1["render_board (all games)\nor render_top (ranked, strength → steam → edge)"]
     R1 --> REP{"--report?"}
-    REP -->|yes| W["write_report → reports/saturday-DATE.md"] --> END
+    REP -->|yes| W["write_report → reports/WEEKDAY-DATE.md"] --> END
     REP -->|no| END((done))
 ```
 
@@ -265,7 +266,7 @@ flowchart LR
 
     G --> SIG["signals\nspread_signal · ml_signal\nspread_move_signal · total_move_signal"]
     SIG --> BOARD["render_board / render_top\nterminal"]
-    SIG --> REP["write_report\nreports/saturday-DATE.md"]
+    SIG --> REP["write_report\nreports/WEEKDAY-DATE.md"]
     G --> DB[("data.db\ngames · snapshots · paper_bets")]
     SIG --> DB
     DB --> AN["analysis/ (Python + R)\n01 paper ROI CI\n02 FPI calibration\n03 line move"]
@@ -618,7 +619,7 @@ flowchart LR
     PUSH --> RJ["R job\n(r-lib/actions, R 4.4)"]
     PY --> P1["py_compile\ncfb_edge.py + analysis/*.py"]
     P1 --> P2["ruff check\n(rule set pinned in ruff.toml)"]
-    P2 --> PT["pytest tests/\n35 cases · no network"]
+    P2 --> PT["pytest tests/\n42 cases · no network"]
     PT --> P3["cfb_edge.py --help\n(argparse still parses)"]
     P3 --> P4["--paper-show --db scratch.db\n(SCHEMA + MIGRATIONS bootstrap)"]
     P4 --> P5["run all 3 analysis .py\nagainst the empty scratch DB\nCFB_DB env var"]
@@ -716,6 +717,6 @@ Remove-Item Env:CFB_DB
 | `tests/` | pytest unit tests, no network — run `python -m pytest -q tests` |
 | `.github/` | CI workflow + dependabot |
 | `ruff.toml`, `requirements-dev.txt` | lint config and dev deps (ruff, pytest) |
-| `reports/` | `saturday-<date>.md` — what the tool said before kickoff |
+| `reports/` | `<weekday>-<date>.md` (e.g. `saturday-2026-09-12.md`) — what the tool said before kickoff |
 | `snapshot.bat` | Task Scheduler wrapper |
 | `data.db`, `bets.csv` | local only, gitignored |
