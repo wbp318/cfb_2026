@@ -14,8 +14,9 @@
 
 ## Before you bet — honest expectations (read this first)
 
-**Nothing in this tool is proven +EV yet.** As of 2026‑09‑09 the backfilled sample is
-51 FBS‑vs‑FBS games (weeks 0–1). Every verdict is *inconclusive*:
+**Nothing in this tool is proven +EV yet.** The backfilled sample is 51 FBS‑vs‑FBS games
+(weeks 0–1); the analysis loop was last re‑run 2026‑09‑12 in both runtimes and the numbers
+below are unchanged since 2026‑09‑09. Every verdict is *inconclusive*:
 
 | Question (analysis/ script) | Answer so far (n=51 games / 34 paper bets) |
 |---|---|
@@ -39,9 +40,18 @@ pip install -r requirements.txt
 python cfb_edge.py                       # full Saturday board + top-10 outliers
 python cfb_edge.py --top 15              # ranked outliers only
 python cfb_edge.py --flagged             # board rows that carry a tag
+python cfb_edge.py --picks               # only the tickets that clear every rule in betting_guide.md
 python cfb_edge.py --bankroll 250        # resize the $Bet column
 python cfb_edge.py --snapshot --report   # persist lines + FPI, paper-log plays, write reports/<weekday>-<date>.md
 python cfb_edge.py --date 2026-09-19     # any date (default: next Saturday)
+```
+
+Each `--report` is also published as a GitHub release so the pre‑kickoff board is frozen
+somewhere you cannot quietly edit. Tags are `<weekday>-<date>`; a same‑day refresh gets a
+suffix (`saturday-2026-09-12-morning`) and the earlier release stays put:
+
+```powershell
+gh release create saturday-2026-09-19 reports/saturday-2026-09-19.md --target main --latest --notes "picks + what changed"
 ```
 
 Sunday morning:
@@ -95,7 +105,7 @@ python --version                           # expect 3.12 or newer (CI tests 3.12
 winget install RProject.R                  # optional: only needed for the R half of the analysis loop
 # then put C:\Program Files\R\R-4.4.2\bin on the PATH — see "Getting Rscript on the PATH" below
 
-winget install Git.Git GitHub.cli          # optional: gh is only for CI/branch-protection admin
+winget install Git.Git GitHub.cli          # optional: gh cuts the weekly releases and does CI/branch-protection admin
 git clone https://github.com/wbp318/cfb_2026.git
 cd cfb_2026
 pip install -r requirements.txt            # runtime: just `requests`
@@ -219,7 +229,7 @@ flowchart TD
     BRANCH -->|"--snapshot"| S1["db_persist: games + snapshots rows"] --> S2["db_paper_log: every strength≥1 play\nwith truth_p, price, stake"] --> RENDER
     BRANCH -->|"--backfill (past date)"| BF["same as --snapshot but games are final:\n'current' = closer · FPI = game-morning run\npaper_bets.backfill = 1"] --> ST
     BRANCH -->|"--settle"| ST["db_persist (scores) →\ndb_settle_paper: grade W/L/P + profit\nsettle_bets: grade bets.csv"] --> END
-    BRANCH -->|"default / --top / --flagged"| RENDER
+    BRANCH -->|"default / --top / --flagged / --picks"| RENDER
 
     RENDER["for each game:\nspread_signal · ml_signal\nspread_move_signal · total_move_signal"] --> R1["render_board (all games)\nor render_top (ranked, strength → steam → edge)"]
     R1 --> REP{"--report?"}
@@ -307,8 +317,9 @@ sides of a key number.
 
 ### The arithmetic, with one worked game
 
-Take Cal at Syracuse from the 2026‑09‑12 board: DK has Syracuse −3.5 (−102), moneyline
-SYR −166 / CAL +140, and FPI projects Syracuse to win by 11.6 with an 80% win probability.
+Take Cal at Syracuse from the 2026‑09‑12 morning board: DK has Syracuse −3.5 (−115),
+moneyline SYR −192 / CAL +160, and FPI projects Syracuse to win by 11.6 with an 80% win
+probability.
 
 ```mermaid
 flowchart LR
@@ -316,21 +327,21 @@ flowchart LR
         MK["market margin (home)
 = −(home spread) = +3.5"]
         FM["FPI margin (home) = +11.6"]
-        ML["moneyline −166 / +140"]
+        ML["moneyline −192 / +160"]
         FP["FPI win % = 80"]
     end
     MK & FM --> D["Δ = 11.6 − 3.5 = 8.1 pts
 → STRONG (≥ 5), side = home"]
     D --> CP["cover % = Φ(8.1 / 13.5) = Φ(0.60) ≈ 73%"]
-    ML --> DV["implied 62.4% / 41.7% → sum 104.1%
-de‑vig: 60.0% / 40.0%"]
-    DV & FP --> E["ML edge = (80 − 60) / 60 = +33% → STRONG ML"]
-    CP --> K1["Kelly at −102: b = 0.98
-f = (0.73·0.98 − 0.27)/0.98 = 45%
-¼ Kelly = 11% → capped at 5% → $5 on $100"]
-    E --> K2["Kelly at −166: b = 0.60
-f = (0.80·0.60 − 0.20)/0.60 = 47%
-¼ Kelly = 12% → capped → $5"]
+    ML --> DV["implied 65.8% / 38.5% → sum 104.2%
+de‑vig: 63.1% / 36.9%"]
+    DV & FP --> E["ML edge = (80 − 63) / 63 ≈ +26% → STRONG ML"]
+    CP --> K1["Kelly at −115: b = 0.87
+f = (0.73·0.87 − 0.27)/0.87 = 42%
+¼ Kelly = 10.5% → capped at 5% → $5 on $100"]
+    E --> K2["Kelly at −192: b = 0.52
+f = (0.80·0.52 − 0.20)/0.52 = 42%
+¼ Kelly = 10.4% → capped → $5"]
 ```
 
 - **Market margin** is just the spread with the sign flipped, from the home team's point of view.
@@ -363,6 +374,7 @@ sequenceDiagram
     Note over You,An: Sat morning
     You->>Tool: --snapshot --report
     Tool->>DB: closing-ish lines + FPI, paper_bets, report .md
+    You->>DB: gh release create (freeze the report on GitHub)
     You->>Tool: --bet ... (each real ticket)
     Tool->>DB: bets.csv
     Note over You,An: Sun morning
@@ -395,7 +407,7 @@ That fires 6 AM → midnight every day at three‑hour spacing; the tool is chea
 
 ```
 Kick CT     Matchup                 DK spread (open)      FPI mrg     Δ  Cov%  ML home/away    FPI%  Total (open)   Tag / $Bet
-sat 02:30pm CAL @ SYR               SYR -3.5 (+1.5)         +11.6   8.1    73  -166/+140         80  56.5 (52.5)    STRONG ATS SYR -3.5 [steam with] [crosses 7,10] $5 · STRONG ML SYR -166 (+33%) $5
+sat 02:30pm CAL @ SYR               SYR -3.5 (+1.5)         +11.6   8.1    73  -192/+160         80  56.5 (52.5)    STRONG ATS SYR -3.5 [steam with] [crosses 7,10] $5 · STRONG ML SYR -192 (+26%) $5
 ```
 
 - **DK spread (open)** — home team's number now, opener in parentheses. Syracuse opened +1.5, now −3.5: five points of steam toward the home side.
@@ -629,7 +641,7 @@ flowchart LR
     P5 & R3 --> OK{"green?"}
     OK -- yes --> M["merge / it's safe to run Saturday"]
     OK -- no --> FIX["fix the code, not the check"]
-    DEP["dependabot (weekly)\nGitHub Actions + pip"] -.-> PUSH
+    DEP["dependabot (weekly)\nGitHub Actions bumps · pip security advisories only"] -.-> PUSH
 ```
 
 The `CFB_DB` environment variable points both loaders at a scratch database; without it
@@ -637,7 +649,7 @@ they read `data.db` in the repo root. Locally you can reproduce the CI checks wi
 
 ```powershell
 pip install -r requirements-dev.txt
-ruff check cfb_edge.py analysis tests
+ruff check cfb_edge.py cfb_gui.py analysis tests
 python -m pytest -q tests
 python cfb_edge.py --paper-show --db $env:TEMP\ci.db
 $env:CFB_DB = "$env:TEMP\ci.db"; python analysis/01_paper_roi_ci/paper_roi.py; Rscript analysis/01_paper_roi_ci/paper_roi.R
@@ -715,8 +727,8 @@ Remove-Item Env:CFB_DB
 | `CLAUDE.md` | conventions for Claude Code |
 | `analysis/` | Python + R twins, offline, read‑only |
 | `tests/` | pytest unit tests, no network — run `python -m pytest -q tests` |
-| `.github/` | CI workflow + dependabot |
+| `.github/` | CI workflow + dependabot (Actions weekly; pip security‑only) |
 | `ruff.toml`, `requirements-dev.txt` | lint config and dev deps (ruff, pytest) |
-| `reports/` | `<weekday>-<date>.md` (e.g. `saturday-2026-09-12.md`) — what the tool said before kickoff |
+| `reports/` | `<weekday>-<date>.md` (e.g. `saturday-2026-09-12.md`) — what the tool said before kickoff; each one is also a GitHub release |
 | `snapshot.bat` | Task Scheduler wrapper |
 | `data.db`, `bets.csv` | local only, gitignored |
