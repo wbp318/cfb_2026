@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _shared.load_data import load_paper_bets  # noqa: E402
+from _shared.load_data import load_paper_bets
 
 MIN_BETS = 10
 BOOT_REPS = 5000

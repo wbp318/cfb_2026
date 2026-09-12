@@ -1,0 +1,9 @@
+line-length = 110
+target-version = "py312"
+
+[lint]
+# Explicit rule set so a ruff upgrade in CI cannot change what "green" means.
+# E4/E7/E9 = import + statement + syntax errors, F = pyflakes.
+select = ["E4", "E7", "E9", "F"]
+# analysis scripts sys.path-insert before importing _shared — E402 is intentional there
+per-file-ignores = { "analysis/**" = ["E402"], "tests/**" = ["E402"] }

@@ -35,7 +35,7 @@ crosses 7 & 10).
 - **⚠market-moved-against** — the line moved ≥ 1.5 pts *away* from FPI. Somebody knows
   something FPI doesn't (QB out, weather, suspension). Skip unless you know the reason and
   disagree with it.
-- **FCS opponents** — never ranked, never staked. FPI's FCS rating is generic.
+- **FCS opponents** — never ranked, never staked, ATS *or* ML. FPI's FCS rating is generic.
 - **⚠blowout-number** — spreads of 28+ are about garbage time, not team strength.
 - **⚠long-dog** — ML dogs beyond +250 are capped at "value"; beyond +400 never staked.
   Variance eats small bankrolls.
