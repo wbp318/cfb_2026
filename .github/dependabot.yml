@@ -1,4 +1,6 @@
-# Weekly grouped PRs for GitHub Actions and the Python runtime deps.
+# Weekly grouped PRs for GitHub Actions. Python deps get security updates only:
+# open-pull-requests-limit: 0 disables version bumps (floor-raising PRs) but
+# Dependabot still opens a PR for any advisory that affects a pinned dependency.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -14,5 +16,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "deps"
