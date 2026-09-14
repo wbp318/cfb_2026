@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 wbp318. All rights reserved. Proprietary — see LICENSE.
 """
 cfb_edge.py — college football outlier finder (single-file, no API keys).
 

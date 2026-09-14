@@ -717,6 +717,14 @@ Remove-Item Env:CFB_DB
 - **Blend.** `02` reports a 50/50 FPI+closer RMSE. If the blend beats both, `MARGIN_SD` and the
   side selection should use it. Only after both runtimes agree on more than a month of data.
 
+## License
+
+**Proprietary — all rights reserved.** The code and the play rules are viewable here for
+transparency, but they are not open source: no copying, running, deploying, or using the
+signals to set or advise on lines without a written license. Commercial licenses (including
+an outright sale) are available to sportsbooks and handicappers — see [LICENSE](LICENSE) and
+contact the owner via [github.com/wbp318](https://github.com/wbp318).
+
 ## Files
 
 | File | What |

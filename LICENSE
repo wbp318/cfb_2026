@@ -1,0 +1,38 @@
+Copyright (c) 2026 wbp318. All rights reserved.
+
+PROPRIETARY SOFTWARE LICENSE
+
+This repository ("the Software") — including cfb_edge.py, cfb_gui.py, the
+analysis/ scripts, the tests, betting_guide.md, the README, and every report,
+diagram, threshold, and rule set contained here — is the copyrighted work of
+the owner listed above and is made publicly viewable for portfolio and
+transparency purposes only.
+
+1. WHAT YOU MAY DO
+   You may view the source code and read the documentation on GitHub.
+
+2. WHAT YOU MAY NOT DO WITHOUT A WRITTEN LICENSE FROM THE OWNER
+   - Copy, download for use, run, or deploy the Software or any part of it.
+   - Modify, translate, port, or create derivative works from it.
+   - Use it, or any signal, threshold, rule, or output it produces, to price,
+     set, move, or hedge betting lines, or to advise any bettor or client.
+   - Sell, sublicense, rent, distribute, or otherwise make it available to any
+     third party, including inside a product or service.
+   - Train, fine-tune, or evaluate any machine-learning model on it.
+
+3. COMMERCIAL LICENSING
+   The owner offers commercial licenses (exclusive or non-exclusive, including
+   outright sale of the copyright) to sportsbooks, handicappers, and other
+   parties. Contact the owner through the GitHub profile at
+   https://github.com/wbp318 to negotiate terms. No rights are granted until a
+   written agreement signed by the owner is in effect.
+
+4. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED. Nothing in the Software is financial or betting advice. The owner is
+   not liable for any loss arising from its use.
+
+5. RESERVATION OF RIGHTS
+   All rights not expressly granted above are reserved. Viewing this repository
+   does not grant any license by implication, estoppel, or otherwise. Any
+   unauthorized use terminates whatever permission Section 1 provides.
