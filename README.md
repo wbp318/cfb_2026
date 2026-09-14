@@ -14,16 +14,16 @@
 
 ## Before you bet — honest expectations (read this first)
 
-**Nothing in this tool is proven +EV yet.** The backfilled sample is 51 FBS‑vs‑FBS games
-(weeks 0–1); the analysis loop was last re‑run 2026‑09‑12 in both runtimes and the numbers
-below are unchanged since 2026‑09‑09. Every verdict is *inconclusive*:
+**Nothing in this tool is proven +EV yet.** The settled sample is 96 FBS‑vs‑FBS games
+(weeks 0–2: 51 backfilled + 45 live from 9/12); the analysis loop was last re‑run
+2026‑09‑14 in both runtimes and they agree. Every verdict is *inconclusive*:
 
-| Question (analysis/ script) | Answer so far (n=51 games / 34 paper bets) |
+| Question (analysis/ script) | Answer so far (n=96 games / 70 paper bets) |
 |---|---|
-| Does the paper ledger make money? (`01`) | Flat ROI **−2.1%**, 95% CI [−40%, +41%] — inconclusive |
-| Is FPI more accurate than the closer? (`02`) | RMSE **16.41 (FPI) vs 16.68 (DK)** — FPI ahead by 0.27 pts, well inside noise |
-| Does the FPI side cover? (`02`) | **53.1%** [39, 66] vs 52.4% break‑even — inconclusive |
-| Does following steam work? (`03`) | Moved‑toward side covers **43.5%** [26, 63] — inconclusive |
+| Does the paper ledger make money? (`01`) | Flat ROI **+3.6%**, 95% CI [−22%, +30%] — inconclusive (spread +11.7%, ML −4.6%, both inconclusive) |
+| Is FPI more accurate than the closer? (`02`) | RMSE **15.37 (FPI) vs 15.36 (DK)** — a dead heat, 0.01 pts |
+| Does the FPI side cover? (`02`) | **54.2%** [44, 64] vs 52.4% break‑even — inconclusive |
+| Does following steam work? (`03`) | Moved‑toward side covers **50.9%** [38, 63] — inconclusive |
 
 FPI is a real model and public lines are efficient. The realistic prior for "public power
 rating vs closing line" is 50–53% ATS, which at −110 is a coin flip. Treat the first
