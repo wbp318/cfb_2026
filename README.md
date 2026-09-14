@@ -723,7 +723,7 @@ Remove-Item Env:CFB_DB
 transparency, but they are not open source: no copying, running, deploying, or using the
 signals to set or advise on lines without a written license. Commercial licenses (including
 an outright sale) are available to sportsbooks and handicappers — see [LICENSE](LICENSE) and
-contact the owner via [github.com/wbp318](https://github.com/wbp318).
+contact William Brooks Parker via [github.com/wbp318](https://github.com/wbp318).
 
 ## Files
 

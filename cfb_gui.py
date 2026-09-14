@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 wbp318. All rights reserved. Proprietary — see LICENSE.
+# Copyright (c) 2026 William Brooks Parker. All rights reserved. Proprietary — see LICENSE.
 """
 cfb_gui.py — local browser dashboard for cfb_edge.py.
 
